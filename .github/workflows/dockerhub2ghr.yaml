@@ -12,7 +12,7 @@ on:
 
 jobs:
   build-and-scan:
-    runs-on: ubuntu-latest
+    runs-on: code-server
 
     steps:
       - name: Checkout code

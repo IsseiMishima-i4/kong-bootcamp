@@ -1,0 +1,81 @@
+name: Push and Scan ECR Image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        run: |
+          set -x
+          ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+          echo "ACCOUNT_ID=$ACCOUNT_ID" >> $GITHUB_ENV
+          ECR_URI="${ACCOUNT_ID}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/${{ vars.REPO_NAME_ECR }}"
+          echo "ECR_URI=$ECR_URI" >> $GITHUB_ENV
+          aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin "$ECR_URI"
+
+      - name: Pull and Tag Docker image
+        run: |
+          set -x
+          docker pull ${{ vars.REPO_NAME_DOCKER }}:${{ vars.IMAGE_TAG_DOCKER }}
+          docker tag ${{ vars.REPO_NAME_DOCKER }}:${{ vars.IMAGE_TAG_DOCKER }} $ECR_URI:${{ vars.IMAGE_TAG_ECR }}
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push $ECR_URI:${{ vars.IMAGE_TAG_ECR }}
+
+      - name: Start ECR image scan
+        run: |
+          aws ecr start-image-scan \
+            --repository-name ${{ vars.REPO_NAME_ECR }} \
+            --image-id imageTag=${{ vars.IMAGE_TAG_ECR }}
+
+      - name: Wait and check scan results
+        run: |
+          for i in {1..10}; do
+            result=$(aws ecr describe-image-scan-findings \
+              --repository-name ${{ vars.REPO_NAME_ECR }} \
+              --image-id imageTag=${{ vars.IMAGE_TAG_ECR }})
+
+            status=$(echo "$result" | jq -r '.imageScanStatus.status')
+            if [[ "$status" == "COMPLETE" ]]; then
+              echo "Scan complete."
+              echo "$result" > scan-results.json
+              break
+            fi
+            echo "Waiting for scan to complete... ($i)"
+            sleep 10
+          done
+
+          CRITICALS=$(jq '[.imageScanFindings.findings[] | select(.severity == "CRITICAL")] | length' scan-results.json)
+          if [ "$CRITICALS" -gt 0 ]; then
+            echo "Vulnerabilities found: CRITICAL=$CRITICALS"
+            echo "Deleting image..."
+            aws ecr batch-delete-image --repository-name ${{ vars.REPO_NAME_ECR }} \
+              --image-ids imageTag=${{ vars.IMAGE_TAG_ECR }}
+            exit 1
+          else
+            echo "No critical vulnerabilities found."
+          fi
+
+      - name: Upload scan results as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-results
+          path: scan-results.json

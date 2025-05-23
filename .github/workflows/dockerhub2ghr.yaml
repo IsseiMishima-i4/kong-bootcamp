@@ -42,8 +42,10 @@ jobs:
       - name: Verify architecture of pushed image
         run: |
           set -x
+          # プッシュしたイメージをGitHub Container Registryからプルしてアーキテクチャを確認
+          docker pull ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
           # イメージのアーキテクチャを確認
-          ARCH=$(docker inspect --format '{{.Architecture}}' ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }})
+          ARCH=$(docker inspect --format '{{.Architecture}}' ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }})
           echo "Image architecture is: $ARCH"
           if [[ "$ARCH" != "arm64" ]]; then
             echo "Error: The image is not ARM64 architecture!" && exit 1
@@ -58,11 +60,3 @@ jobs:
       - name: Check scan results (simulated)
         run: |
           echo "No critical vulnerabilities found." > scan-results.json
-          cat scan-results.json
-
-      - name: Upload scan results as artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: scan-results
-          path: scan-results.json

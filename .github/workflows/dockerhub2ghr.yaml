@@ -1,18 +1,18 @@
 name: Push and Scan GitHub Container Registry Image
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 手動トリガーイベント
 
-  env:
+env:
   # 環境変数の設定
   REPO_NAME_DOCKER: kong/kong-gateway           # DockerHubのリポジトリ名
   IMAGE_TAG_DOCKER: 3.4.3.18                   # DockerHubのタグ名
   REPO_NAME_GHCR: kong-gateway                 # GitHub Container Registryのリポジトリ名
-  IMAGE_TAG_GHCR: 3.4.3.18
+  IMAGE_TAG_GHCR: 3.4.3.18                     # GHCRのタグ名
 
 jobs:
   build-and-scan:
-    runs-on: code-server
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -27,12 +27,12 @@ jobs:
       - name: Pull and Tag Docker image
         run: |
           set -x
-          docker pull ${{ vars.REPO_NAME_DOCKER }}:${{ vars.IMAGE_TAG_DOCKER }}
-          docker tag ${{ vars.REPO_NAME_DOCKER }}:${{ vars.IMAGE_TAG_DOCKER }} ghcr.io/${{ github.repository_owner }}/${{ vars.REPO_NAME_GHCR }}:${{ vars.IMAGE_TAG_GHCR }}
+          docker pull ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
+          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
       - name: Push Docker image to GitHub Container Registry
         run: |
-          docker push ghcr.io/${{ github.repository_owner }}/${{ vars.REPO_NAME_GHCR }}:${{ vars.IMAGE_TAG_GHCR }}
+          docker push ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
       - name: Start GitHub Container Registry image scan (GHCR only supports GitHub Advanced Security scanning)
         run: |
@@ -54,3 +54,4 @@ jobs:
         with:
           name: scan-results
           path: scan-results.json
+

@@ -30,6 +30,7 @@ jobs:
           # ARM64用のイメージをプル
           docker pull --platform linux/arm64 ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
           REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "Repository Owner: $REPO_OWNER_LOWER"
           # ARM64イメージにタグを付ける（--platformフラグなし）
           docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
@@ -60,3 +61,11 @@ jobs:
       - name: Check scan results (simulated)
         run: |
           echo "No critical vulnerabilities found." > scan-results.json
+          cat scan-results.json
+
+      - name: Upload scan results as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-results
+          path: scan-results.json

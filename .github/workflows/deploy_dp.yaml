@@ -4,8 +4,12 @@ on:
   workflow_dispatch:  # 手動トリガーイベント
 
 jobs:
-  deploy-dp:
+  build:
     runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        platform:
+          - linux/arm64
     env:
       KONNECT_API: https://us.api.konghq.com/v2
       KONG_VER: "3.4.3.18"

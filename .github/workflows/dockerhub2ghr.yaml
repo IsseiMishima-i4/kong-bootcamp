@@ -3,6 +3,13 @@ name: Push and Scan GitHub Container Registry Image
 on:
   workflow_dispatch:
 
+  env:
+  # 環境変数の設定
+  REPO_NAME_DOCKER: kong/kong-gateway           # DockerHubのリポジトリ名
+  IMAGE_TAG_DOCKER: 3.4.0.0                    # DockerHubのタグ名
+  REPO_NAME_GHCR: kong-gateway                 # GitHub Container Registryのリポジトリ名
+  IMAGE_TAG_GHCR: 3.4.0.0
+
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest

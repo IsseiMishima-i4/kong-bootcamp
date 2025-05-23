@@ -28,13 +28,17 @@ jobs:
         run: |
           set -x
           docker pull ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
-          # オーナー名を小文字に変換してタグ付け
-          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/${{ github.repository_owner | toLowerCase() }}/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
+          
+          # オーナー名を小文字に変換
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          
+          # 小文字に変換したオーナー名を使用してタグ付け
+          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
       - name: Push Docker image to GitHub Container Registry
         run: |
-          # オーナー名を小文字に変換してプッシュ
-          docker push ghcr.io/${{ github.repository_owner | toLowerCase() }}/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker push ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
       - name: Start GitHub Container Registry image scan (GHCR only supports GitHub Advanced Security scanning)
         run: |

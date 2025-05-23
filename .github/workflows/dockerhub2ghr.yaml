@@ -6,9 +6,9 @@ on:
   env:
   # 環境変数の設定
   REPO_NAME_DOCKER: kong/kong-gateway           # DockerHubのリポジトリ名
-  IMAGE_TAG_DOCKER: 3.4.0.0                    # DockerHubのタグ名
+  IMAGE_TAG_DOCKER: 3.4.3.18                   # DockerHubのタグ名
   REPO_NAME_GHCR: kong-gateway                 # GitHub Container Registryのリポジトリ名
-  IMAGE_TAG_GHCR: 3.4.0.0
+  IMAGE_TAG_GHCR: 3.4.3.18
 
 jobs:
   build-and-scan:

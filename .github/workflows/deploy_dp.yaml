@@ -1,7 +1,7 @@
-name: Deploy Kong Data Plane
+name: Deploy Kong Data Plane to AKS
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 手動トリガーイベント
 
 jobs:
   deploy-dp:
@@ -13,46 +13,52 @@ jobs:
       - name: Set up dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq openssl
+          sudo apt-get install -y jq openssl curl
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure Azure credentials
+        uses: azure/setup-azcli@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          azure-auth: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Set up kubeconfig for EKS
+      - name: Set up kubeconfig for AKS
         run: |
-          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }}
+          az aks get-credentials --resource-group ${{ secrets.AKS_RESOURCE_GROUP }} --name ${{ secrets.AKS_CLUSTER_NAME }}
 
       - name: Get Control Plane ID and upload TLS certs
         id: get_cp
         run: |
+          # Get the Control Plane ID
           CP_ID=$(curl -s -X GET \
             -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
             "${KONNECT_API}/control-planes" \
             | jq -r --arg name "${{ vars.CP_NAME }}" '.data[] | select(.name==$name) | .id')
+          
+          # Generate TLS certificates
           mkdir certs
           openssl req -new -x509 -nodes -newkey rsa:2048 \
             -subj "/CN=kongdp/C=US" \
             -keyout ./certs/tls.key -out ./certs/tls.crt -days 3650
+          
+          # Upload the certificate to the control plane
           export CERT=$(awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' ./certs/tls.crt)
           curl -sX POST \
             -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
             ${KONNECT_API}/control-planes/${CP_ID}/dp-client-certificates \
             --json '{"cert":"'"$CERT"'"}'
+          
+          # Get the control plane endpoint and telemetry endpoint
           CP_ENDPOINT=$(curl -s -X GET \
             -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
             "${KONNECT_API}/control-planes/${CP_ID}" \
             | jq -r '.config.control_plane_endpoint')
           CP_ENDPOINT=$(sed "s@https://@@" <<< $CP_ENDPOINT)
+          
           TP_ENDPOINT=$(curl -s -X GET \
             -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
             "${KONNECT_API}/control-planes/${CP_ID}" \
             | jq -r '.config.telemetry_endpoint')
           TP_ENDPOINT=$(sed "s@https://@@" <<< $TP_ENDPOINT)
+          
           echo "tp_endpoint=$TP_ENDPOINT" >> "$GITHUB_OUTPUT"
           echo "cp_endpoint=$CP_ENDPOINT" >> "$GITHUB_OUTPUT"
 
@@ -68,7 +74,7 @@ jobs:
         run: |
           cat <<EOF > ./values.yaml
           image:
-            repository: ${{ vars.KONG_REPO }}
+            repository: ghcr.io/IsseiMishima-i4/kong-gateway
             tag: ${{ vars.KONG_VER }}
             pullSecrets:
               - ghcr-secret

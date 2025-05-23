@@ -50,4 +50,3 @@ jobs:
         with:
           name: scan-results
           path: scan-results.json
-

@@ -30,7 +30,7 @@ jobs:
           # ARM64用のイメージをプル
           docker pull --platform linux/arm64 ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
           REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "Repository Owner: $REPO_OWNER_LOWER"
+          echo "Repository Owner (lowercase): $REPO_OWNER_LOWER"  # ここで確認する
           # ARM64イメージにタグを付ける（--platformフラグなし）
           docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
@@ -69,3 +69,4 @@ jobs:
         with:
           name: scan-results
           path: scan-results.json
+

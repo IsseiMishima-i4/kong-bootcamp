@@ -36,15 +36,11 @@ jobs:
 
       - name: Start GitHub Container Registry image scan (GHCR only supports GitHub Advanced Security scanning)
         run: |
-          # GitHub doesn't support image scanning via CLI natively, so you would typically rely on GitHub Advanced Security or external tools like Trivy
-          # Here we're just simulating the "scan" with a simple tag-based check
           echo "Simulating image scan..."
-          # For real image scanning, consider integrating Trivy or another scanning tool
           sleep 10  # Placeholder for actual scan
 
       - name: Check scan results (simulated)
         run: |
-          # Simulated scan result
           echo "No critical vulnerabilities found." > scan-results.json
           cat scan-results.json
 

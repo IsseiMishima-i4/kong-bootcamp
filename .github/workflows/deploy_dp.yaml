@@ -8,6 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       KONNECT_API: https://us.api.konghq.com/v2
+      KONG_VER: "3.10.0.1"
 
     steps:
       - name: Set up dependencies
@@ -82,7 +83,7 @@ jobs:
           cat <<EOF > ./values.yaml
           image:
             repository: ghcr.io/IsseiMishima-i4/kong-gateway
-            tag: ${{ vars.KONG_VER }}
+            tag: ${{ env.KONG_VER }}  # ここで設定したKONG_VERを参照
             pullSecrets:
               - ghcr-secret
 

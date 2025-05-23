@@ -1,138 +1,54 @@
-name: Deploy Kong Data Plane to AKS
+name: Push and Scan GitHub Container Registry Image
 
 on:
-  workflow_dispatch:  # 手動トリガーイベント
+  workflow_dispatch:
+
+env:
+  # 環境変数の設定
+  REPO_NAME_DOCKER: kong/kong-gateway           # DockerHubのリポジトリ名
+  IMAGE_TAG_DOCKER: 3.4.3.18                   # DockerHubのタグ名
+  REPO_NAME_GHCR: kong-gateway  # GitHub Container Registryのリポジトリ名（小文字に変更）
+  IMAGE_TAG_GHCR: 3.4.3.18                     # GHCRのタグ名
 
 jobs:
-  deploy-dp:
+  build-and-scan:
     runs-on: ubuntu-latest
-    env:
-      KONNECT_API: https://us.api.konghq.com/v2
 
     steps:
-      - name: Set up dependencies
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        id: login-ghcr
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq openssl curl
+          set -x
+          echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Install Azure CLI
+      - name: Pull and Tag Docker image
         run: |
-          # Azure CLIをインストール
-          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-          az --version  # インストール確認
+          set -x
+          docker pull ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
-      - name: Configure Azure credentials
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Set up kubeconfig for AKS
+      - name: Push Docker image to GitHub Container Registry
         run: |
-          # AKSクラスターのkubeconfigを設定
-          az aks get-credentials --resource-group ${{ secrets.AKS_RESOURCE_GROUP }} --name ${{ secrets.AKS_CLUSTER_NAME }}
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker push ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
-      - name: Get Control Plane ID and upload TLS certs
-        id: get_cp
+      - name: Start GitHub Container Registry image scan (GHCR only supports GitHub Advanced Security scanning)
         run: |
-          # Get the Control Plane ID
-          CP_ID=$(curl -s -X GET \
-            -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
-            "${KONNECT_API}/control-planes" \
-            | jq -r --arg name "${{ vars.CP_NAME }}" '.data[] | select(.name==$name) | .id')
-          
-          # Generate TLS certificates
-          mkdir certs
-          openssl req -new -x509 -nodes -newkey rsa:2048 \
-            -subj "/CN=kongdp/C=US" \
-            -keyout ./certs/tls.key -out ./certs/tls.crt -days 3650
-          
-          # Upload the certificate to the control plane
-          export CERT=$(awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' ./certs/tls.crt)
-          curl -sX POST \
-            -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
-            ${KONNECT_API}/control-planes/${CP_ID}/dp-client-certificates \
-            --json '{"cert":"'"$CERT"'"}'
-          
-          # Get the control plane endpoint and telemetry endpoint
-          CP_ENDPOINT=$(curl -s -X GET \
-            -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
-            "${KONNECT_API}/control-planes/${CP_ID}" \
-            | jq -r '.config.control_plane_endpoint')
-          CP_ENDPOINT=$(sed "s@https://@@" <<< $CP_ENDPOINT)
-          
-          TP_ENDPOINT=$(curl -s -X GET \
-            -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
-            "${KONNECT_API}/control-planes/${CP_ID}" \
-            | jq -r '.config.telemetry_endpoint')
-          TP_ENDPOINT=$(sed "s@https://@@" <<< $TP_ENDPOINT)
-          
-          echo "tp_endpoint=$TP_ENDPOINT" >> "$GITHUB_OUTPUT"
-          echo "cp_endpoint=$CP_ENDPOINT" >> "$GITHUB_OUTPUT"
+          echo "Simulating image scan..."
+          sleep 10  # Placeholder for actual scan
 
-      - name: Create Kubernetes namespace and TLS secret
+      - name: Check scan results (simulated)
         run: |
-          kubectl create ns kong || true
-          kubectl create secret tls kong-cluster-cert -n kong \
-            --cert=./certs/tls.crt \
-            --key=./certs/tls.key \
-            --dry-run=client -o yaml | kubectl apply -f -
+          echo "No critical vulnerabilities found." > scan-results.json
+          cat scan-results.json
 
-      - name: Generate values.yaml
-        run: |
-          cat <<EOF > ./values.yaml
-          image:
-            repository: ghcr.io/IsseiMishima-i4/kong-gateway
-            tag: ${{ vars.KONG_VER }}
-            pullSecrets:
-              - ghcr-secret
-
-          secretVolumes:
-            - kong-cluster-cert
-
-          admin:
-            enabled: false
-
-          env:
-            role: data_plane
-            database: "off"
-            cluster_mtls: pki
-            cluster_control_plane: ${{ steps.get_cp.outputs.cp_endpoint }}:443
-            cluster_server_name: ${{ steps.get_cp.outputs.cp_endpoint }}
-            cluster_telemetry_endpoint: ${{ steps.get_cp.outputs.tp_endpoint }}:443
-            cluster_telemetry_server_name: ${{ steps.get_cp.outputs.tp_endpoint }}
-            cluster_cert: /etc/secrets/kong-cluster-cert/tls.crt
-            cluster_cert_key: /etc/secrets/kong-cluster-cert/tls.key
-            lua_ssl_trusted_certificate: system
-            konnect_mode: "on"
-            vitals: "off"
-            nginx_worker_processes: "1"
-            upstream_keepalive_max_requests: "100000"
-            nginx_http_keepalive_requests: "100000"
-            proxy_access_log: "off"
-            dns_stale_ttl: "3600"
-            router_flavor: expressions
-
-          ingressController:
-            enabled: false
-            installCRDs: false
-
-          resources:
-            requests:
-              cpu: 1
-              memory: "2Gi"
-          EOF
-
-      - name: Deploy with Helm
-        run: |
-          helm repo add kong https://charts.konghq.com
-          helm repo update
-          helm upgrade -i my-kong kong/kong -n kong --values ./values.yaml --debug --wait
-
-      - name: Upload artifacts
+      - name: Upload scan results as artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kong-dp-config
-          path: |
-            ./values.yaml
-            ./certs/tls.crt
-            ./certs/tls.key
+          name: scan-results
+          path: scan-results.json

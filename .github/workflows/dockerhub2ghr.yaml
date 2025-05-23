@@ -39,6 +39,17 @@ jobs:
           # ARM64用のイメージをプッシュ
           docker push ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
+      - name: Verify architecture of pushed image
+        run: |
+          set -x
+          # イメージのアーキテクチャを確認
+          ARCH=$(docker inspect --format '{{.Architecture}}' ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }})
+          echo "Image architecture is: $ARCH"
+          if [[ "$ARCH" != "arm64" ]]; then
+            echo "Error: The image is not ARM64 architecture!" && exit 1
+          fi
+          echo "The image is ARM64 architecture."
+
       - name: Start GitHub Container Registry image scan (GHCR only supports GitHub Advanced Security scanning)
         run: |
           echo "Simulating image scan..."
@@ -55,4 +66,3 @@ jobs:
         with:
           name: scan-results
           path: scan-results.json
-

@@ -1,13 +1,13 @@
 name: Push and Scan GitHub Container Registry Image
 
 on:
-  workflow_dispatch:  # 手動トリガーイベント
+  workflow_dispatch:
 
 env:
   # 環境変数の設定
   REPO_NAME_DOCKER: kong/kong-gateway           # DockerHubのリポジトリ名
   IMAGE_TAG_DOCKER: 3.4.3.18                   # DockerHubのタグ名
-  REPO_NAME_GHCR: kong-gateway  # GitHub Container Registryのリポジトリ名（小文字に変更）
+  REPO_NAME_GHCR: isseimishima-i4/kong-gateway  # GitHub Container Registryのリポジトリ名（小文字に変更）
   IMAGE_TAG_GHCR: 3.4.3.18                     # GHCRのタグ名
 
 jobs:
@@ -22,17 +22,13 @@ jobs:
         id: login-ghcr
         run: |
           set -x
-          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Pull and Tag Docker image
         run: |
           set -x
           docker pull ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
-          
-          # オーナー名を小文字に変換
           REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          
-          # 小文字に変換したオーナー名を使用してタグ付け
           docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
       - name: Push Docker image to GitHub Container Registry

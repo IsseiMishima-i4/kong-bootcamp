@@ -24,12 +24,12 @@ jobs:
         run: |
           docker pull --platform linux/arm64 ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
           REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}-arm64
+          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
       - name: Push ARM64 image to GHCR
         run: |
           REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          docker push ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}-arm64
+          docker push ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
       - name: Wait for GHCR scan (optional, for reliability)
         run: sleep 30

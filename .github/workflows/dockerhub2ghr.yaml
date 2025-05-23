@@ -1,59 +1,69 @@
-name: Push and Scan GitHub Container Registry Image
+name: Push and Scan ARM64 Image to GHCR
 
 on:
-  workflow_dispatch:  # 手動トリガーイベント
+  workflow_dispatch:
 
 env:
-  # 環境変数の設定
-  REPO_NAME_DOCKER: kong/kong-gateway           # DockerHubのリポジトリ名
-  IMAGE_TAG_DOCKER: 3.4.3.18                   # DockerHubのタグ名
-  REPO_NAME_GHCR: kong-gateway  # GitHub Container Registryのリポジトリ名（小文字に変更）
-  IMAGE_TAG_GHCR: 3.4.3.18                     # GHCRのタグ名
+  REPO_NAME_DOCKER: kong/kong-gateway
+  IMAGE_TAG_DOCKER: 3.4.3.18
+  REPO_NAME_GHCR: kong-gateway
+  IMAGE_TAG_GHCR: 3.4.3.18
 
 jobs:
-  build:
+  build-and-scan-arm64:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
-        id: login-ghcr
-        run: |
-          set -x
-          echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Pull ARM64 Docker image
         run: |
-          set -x
-          # ARM64用のイメージをプル
           docker pull --platform linux/arm64 ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
           REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "Repository Owner (lowercase): $REPO_OWNER_LOWER"  # ここで確認する
-          # ARM64イメージにタグを付ける（--platformフラグなし）
-          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
+          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}-arm64
 
-      - name: Push ARM64 Docker image to GitHub Container Registry
+      - name: Push ARM64 image to GHCR
         run: |
           REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          # ARM64用のイメージをプッシュ
-          docker push ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
+          docker push ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}-arm64
 
-      - name: Start GitHub Container Registry image scan (GHCR only supports GitHub Advanced Security scanning)
-        run: |
-          echo "Simulating image scan..."
-          sleep 10  # Placeholder for actual scan
+      - name: Wait for GHCR scan (optional, for reliability)
+        run: sleep 30
 
-      - name: Check scan results (simulated)
+      - name: Download and install GitHub CLI
         run: |
-          echo "No critical vulnerabilities found." > scan-results.json
-          cat scan-results.json
+          type -p gh || (sudo apt-get update && sudo apt-get install -y gh jq)
+
+      - name: Get scan results from GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_VERSION="${{ env.IMAGE_TAG_GHCR }}-arm64"
+
+          # Get the list of image versions for the container package
+          gh api -H "Accept: application/vnd.github+json" \
+            /users/${{ github.repository_owner }}/packages/container/${{ env.REPO_NAME_GHCR }}/versions \
+            > ghcr_versions.json
+
+          VERSION_ID=$(jq -r --arg tag "$IMAGE_VERSION" '.[] | select(.metadata.container.tags[] == $tag) | .id' ghcr_versions.json)
+          if [ -z "$VERSION_ID" ]; then
+            echo "Image version not found in GHCR"
+            exit 1
+          fi
+
+          # Get the security advisories (scan results)
+          gh api -H "Accept: application/vnd.github+json" \
+            /users/${{ github.repository_owner }}/packages/container/${{ env.REPO_NAME_GHCR }}/versions/$VERSION_ID/security-advisories \
+            > image-scan-report.json
+          cat image-scan-report.json
 
       - name: Upload scan results as artifact
-        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: scan-results
-          path: scan-results.json
-
+          name: image-scan-report
+          path: image-scan-report.json

@@ -7,11 +7,11 @@ env:
   # 環境変数の設定
   REPO_NAME_DOCKER: kong/kong-gateway           # DockerHubのリポジトリ名
   IMAGE_TAG_DOCKER: 3.4.3.18                   # DockerHubのタグ名
-  REPO_NAME_GHCR: kong-gateway  # GitHub Container Registryのリポジトリ名（小文字に変更）
+  REPO_NAME_GHCR: isseimishima-i4/kong-gateway  # GitHub Container Registryのリポジトリ名（小文字に変更）
   IMAGE_TAG_GHCR: 3.4.3.18                     # GHCRのタグ名
 
 jobs:
-  build:
+  build-and-scan:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,23 +22,17 @@ jobs:
         id: login-ghcr
         run: |
           set -x
-          echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Pull ARM64 Docker image
+      - name: Pull and Tag Docker image
         run: |
           set -x
-          # ARM64用のイメージをプル
-          docker pull --platform linux/arm64 ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
-          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "Repository Owner (lowercase): $REPO_OWNER_LOWER"  # ここで確認する
-          # ARM64イメージにタグを付ける（--platformフラグなし）
-          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
+          docker pull ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
+          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
-      - name: Push ARM64 Docker image to GitHub Container Registry
+      - name: Push Docker image to GitHub Container Registry
         run: |
-          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          # ARM64用のイメージをプッシュ
-          docker push ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
+          docker push ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
       - name: Start GitHub Container Registry image scan (GHCR only supports GitHub Advanced Security scanning)
         run: |
@@ -56,4 +50,3 @@ jobs:
         with:
           name: scan-results
           path: scan-results.json
-

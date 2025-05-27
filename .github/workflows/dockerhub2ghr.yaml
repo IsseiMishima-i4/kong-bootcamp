@@ -28,7 +28,8 @@ jobs:
         run: |
           set -x
           docker pull ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
-          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
 
       - name: Push Docker image to GitHub Container Registry
         run: |

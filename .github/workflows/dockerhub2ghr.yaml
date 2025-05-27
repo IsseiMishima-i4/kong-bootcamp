@@ -25,7 +25,7 @@ jobs:
       run: docker pull kong/kong-gateway:3.10.0.2-20250520-ubuntu
 
     - name: Log in to GHCR
-      run: echo "${{ secrets.PAT }}" | docker login ghcr.io -u isseimishima-i4 --password-stdin
+      run: echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u isseimishima-i4 --password-stdin
 
     - name: Tag Docker image
       run: docker tag kong/kong-gateway:3.10.0.2-20250520-ubuntu ghcr.io/isseimishima-i4/kong:3.10.0.2-20250520-ubuntu
@@ -53,6 +53,6 @@ jobs:
           echo "No vulnerabilities found."
         else
           echo "Vulnerabilities found, deleting image..."
-          docker rmi ghcr.io/naoyahorita-i4/kong:3.10.0.2-20250520-ubuntu || true
+          docker rmi ghcr.io/isseimishima-i4/kong:3.10.0.2-20250520-ubuntu || true
           exit 1
         fi

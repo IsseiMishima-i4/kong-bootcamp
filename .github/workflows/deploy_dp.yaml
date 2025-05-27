@@ -14,83 +14,79 @@ jobs:
       KONNECT_API: https://us.api.konghq.com/v2
       KONG_VER: "3.4.3.18"
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq openssl curl
-
-      - name: Install Azure CLI
-        run: |
-          # Azure CLIをインストール
-          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-          az --version  # インストール確認
-
-      - name: Configure Azure credentials
-        uses: azure/login@v2
+      - name: Azure login
+        uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Set up kubeconfig for AKS
+      - name: Get AKS kubeconfig
         run: |
-          # AKSクラスターのkubeconfigを設定
-          az aks get-credentials --resource-group ${{ secrets.AKS_RESOURCE_GROUP }} --name ${{ secrets.AKS_CLUSTER_NAME }}
+          az aks get-credentials \
+            --resource-group ${{ secrets.AKS_RESOURCE_GROUP }} \
+            --name ${{ secrets.AKS_CLUSTER_NAME }} \
+            --overwrite-existing
 
-      - name: Get Control Plane ID and upload TLS certs
-        id: get_cp
+      - name: Create GHCR pull secret in Kubernetes
         run: |
-          # Get the Control Plane ID
-          CP_ID=$(curl -s -X GET \
-            -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
-            "${KONNECT_API}/control-planes" \
-            | jq -r --arg name "${{ vars.CP_NAME }}" '.data[] | select(.name==$name) | .id')
-          
-          # Generate TLS certificates
+          kubectl create ns kong || true
+          kubectl create secret docker-registry ghcr-secret \
+            --docker-server=ghcr.io \
+            --docker-username=${{ secrets.GHCR_USERNAME }} \
+            --docker-password=${{ secrets.GHCR_TOKEN }} \
+            --docker-email=${{ secrets.GHCR_EMAIL }} \
+            -n kong --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Generate TLS cert and register to Konnect
+        id: cert
+        run: |
           mkdir certs
           openssl req -new -x509 -nodes -newkey rsa:2048 \
             -subj "/CN=kongdp/C=US" \
             -keyout ./certs/tls.key -out ./certs/tls.crt -days 3650
-          
-          # Upload the certificate to the control plane
+
           export CERT=$(awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' ./certs/tls.crt)
+
+          CP_ID=$(curl -s -X GET \
+            -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
+            "$KONNECT_API/control-planes" \
+            | jq -r --arg name "${{ vars.CP_NAME }}" '.data[] | select(.name==$name) | .id')
+
           curl -sX POST \
             -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
-            ${KONNECT_API}/control-planes/${CP_ID}/dp-client-certificates \
+            "$KONNECT_API/control-planes/${CP_ID}/dp-client-certificates" \
             --json '{"cert":"'"$CERT"'"}'
-          
-          # Get the control plane endpoint and telemetry endpoint
+
           CP_ENDPOINT=$(curl -s -X GET \
             -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
-            "${KONNECT_API}/control-planes/${CP_ID}" \
-            | jq -r '.config.control_plane_endpoint')
-          CP_ENDPOINT=$(sed "s@https://@@" <<< $CP_ENDPOINT)
-          
+            "$KONNECT_API/control-planes/${CP_ID}" \
+            | jq -r '.config.control_plane_endpoint' | sed "s@https://@@")
+
           TP_ENDPOINT=$(curl -s -X GET \
             -H "Authorization: Bearer ${{ secrets.KONNECT_TOKEN }}" \
-            "${KONNECT_API}/control-planes/${CP_ID}" \
-            | jq -r '.config.telemetry_endpoint')
-          TP_ENDPOINT=$(sed "s@https://@@" <<< $TP_ENDPOINT)
-          
-          echo "tp_endpoint=$TP_ENDPOINT" >> "$GITHUB_OUTPUT"
-          echo "cp_endpoint=$CP_ENDPOINT" >> "$GITHUB_OUTPUT"
+            "$KONNECT_API/control-planes/${CP_ID}" \
+            | jq -r '.config.telemetry_endpoint' | sed "s@https://@@")
 
-      - name: Create Kubernetes namespace and TLS secret
+          echo "cp_endpoint=$CP_ENDPOINT" >> $GITHUB_OUTPUT
+          echo "tp_endpoint=$TP_ENDPOINT" >> $GITHUB_OUTPUT
+
+      - name: Dump all outputs
         run: |
-          kubectl create ns kong || true
+          echo '${{ toJson(steps.cert.outputs) }}'
+
+      - name: Create TLS secret for Kong
+        run: |
           kubectl create secret tls kong-cluster-cert -n kong \
             --cert=./certs/tls.crt \
             --key=./certs/tls.key \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Generate values.yaml
+      - name: Create values.yaml
         run: |
-          cat <<EOF > ./values.yaml
+          cat <<EOF > values.yaml
           image:
-            repository: ghcr.io/isseimishima-i4/kong
-            tag: 3.10.0.2-20250520-ubuntu
+            repository: ${{ vars.KONG_REPO }}
+            tag: ${{ vars.KONG_VER }}
+            pullPolicy: Always
             pullSecrets:
               - ghcr-secret
 
@@ -104,10 +100,11 @@ jobs:
             role: data_plane
             database: "off"
             cluster_mtls: pki
-            cluster_control_plane: ${{ steps.get_cp.outputs.cp_endpoint }}:443
-            cluster_server_name: ${{ steps.get_cp.outputs.cp_endpoint }}
-            cluster_telemetry_endpoint: ${{ steps.get_cp.outputs.tp_endpoint }}:443
-            cluster_telemetry_server_name: ${{ steps.get_cp.outputs.tp_endpoint }}
+            cluster_control_plane: ${{ steps.cert.outputs.cp_endpoint }}:443
+            cluster_dp_labels: "type:docker-kubernetesOS"
+            cluster_server_name: ${{ steps.cert.outputs.cp_endpoint }}
+            cluster_telemetry_endpoint: ${{ steps.cert.outputs.tp_endpoint }}:443
+            cluster_telemetry_server_name: ${{ steps.cert.outputs.tp_endpoint }}
             cluster_cert: /etc/secrets/kong-cluster-cert/tls.crt
             cluster_cert_key: /etc/secrets/kong-cluster-cert/tls.key
             lua_ssl_trusted_certificate: system
@@ -130,11 +127,11 @@ jobs:
               memory: "2Gi"
           EOF
 
-      - name: Deploy with Helm
+      - name: Deploy Kong DP via Helm
         run: |
           helm repo add kong https://charts.konghq.com
           helm repo update
-          helm upgrade -i my-kong kong/kong -n kong --values ./values.yaml --debug --wait
+          helm upgrade -i my-kong kong/kong -n kong --values ./values.yaml --wait --debug --timeout 10m
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

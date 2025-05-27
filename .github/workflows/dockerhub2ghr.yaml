@@ -1,14 +1,7 @@
-name: Push and Scan GitHub Container Registry Image
+name: Docker Pull & Push Image Workflow
 
 on:
   workflow_dispatch:
-
-env:
-  # 環境変数の設定
-  REPO_NAME_DOCKER: kong/kong-gateway           # DockerHubのリポジトリ名
-  IMAGE_TAG_DOCKER: 3.4.3.18                   # DockerHubのタグ名
-  REPO_NAME_GHCR: kong-gateway  # GitHub Container Registryのリポジトリ名（小文字に変更）
-  IMAGE_TAG_GHCR: 3.4.3.18                    # GHCRのタグ名
 
 jobs:
   build:
@@ -19,40 +12,47 @@ jobs:
           - linux/arm64
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
 
-      - name: Log in to GitHub Container Registry
-        id: login-ghcr
-        run: |
-          set -x
-          echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
 
-      - name: Pull and Tag Docker image
-        run: |
-          set -x
-          docker pull ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }}
-          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          docker tag ${{ env.REPO_NAME_DOCKER }}:${{ env.IMAGE_TAG_DOCKER }} ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Push Docker image to GitHub Container Registry
-        run: |
-          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          docker push ghcr.io/$REPO_OWNER_LOWER/${{ env.REPO_NAME_GHCR }}:${{ env.IMAGE_TAG_GHCR }}
+    - name: Pull Docker image
+      run: docker pull kong/kong-gateway:3.10.0.2-20250520-ubuntu
 
-      - name: Start GitHub Container Registry image scan (GHCR only supports GitHub Advanced Security scanning)
-        run: |
-          echo "Simulating image scan..."
-          sleep 10  # Placeholder for actual scan
+    - name: Log in to GHCR
+      run: echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u isseimishima-i4 --password-stdin
 
-      - name: Check scan results (simulated)
-        run: |
-          echo "No critical vulnerabilities found." > scan-results.json
-          cat scan-results.json
+    - name: Tag Docker image
+      run: docker tag kong/kong-gateway:3.10.0.2-20250520-ubuntu ghcr.io/isseimishima-i4/kong:3.10.0.2-20250520-ubuntu
 
-      - name: Upload scan results as artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: scan-results
-          path: scan-results.json
+    - name: Push Docker image to GHCR
+      run: docker push ghcr.io/isseimishima-i4/kong:3.10.0.2-20250520-ubuntu
+
+    - name: Install Trivy
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget
+        wget -O trivy_latest.deb https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.62.1_Linux-ARM64.deb
+        sudo dpkg -i trivy_latest.deb
+
+    - name: Run Trivy scan
+      id: trivy
+      run: |
+        trivy image --quiet --severity HIGH,CRITICAL ghcr.io/isseimishima-i4/kong:3.10.0.2-20250520-ubuntu > trivy_report.txt
+        cat trivy_report.txt
+
+    - name: Check for vulnerabilities
+      run: |
+        last_line=$(tail -n 2 trivy_report.txt)
+        if [[ "$last_line" == *"'0': Clean"* ]]; then
+          echo "No vulnerabilities found."
+        else
+          echo "Vulnerabilities found, deleting image..."
+          docker rmi ghcr.io/isseimishima-i4/kong:3.10.0.2-20250520-ubuntu || true
+          exit 1
+        fi

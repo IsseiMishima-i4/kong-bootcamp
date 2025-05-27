@@ -1,9 +1,7 @@
-name: Docker Image Workflow
+name: Docker Pull & Push Image Workflow
 
 on:
-  push:
-    branches:
-      - main  # メインブランチにPushされた場合フローをキック
+  workflow_dispatch:
 
 jobs:
   build:

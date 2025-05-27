@@ -88,8 +88,8 @@ jobs:
         run: |
           cat <<EOF > values.yaml
           image:
-            repository: ${{ vars.KONG_REPO }}
-            tag: ${{ vars.KONG_VER }}
+            repository: ghcr.io/isseimishima-i4/kong
+            tag: 3.10.0.2-20250520-ubuntu
             pullPolicy: Always
             pullSecrets:
               - ghcr-secret

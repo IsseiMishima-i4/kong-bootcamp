@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         platform:
@@ -15,6 +15,9 @@ jobs:
       KONG_VER: "3.4.3.18"
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Set up dependencies
         run: |
           sudo apt-get update

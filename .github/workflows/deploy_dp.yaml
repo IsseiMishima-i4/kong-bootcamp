@@ -90,7 +90,7 @@ jobs:
           cat <<EOF > ./values.yaml
           image:
             repository: ghcr.io/isseimishima-i4/kong
-            tag: ${{ env.KONG_VER }}  # ここで設定したKONG_VERを参照
+            tag: 3.10.0.2-20250520-ubuntu
             pullSecrets:
               - ghcr-secret
 

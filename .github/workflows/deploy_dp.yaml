@@ -70,6 +70,7 @@ jobs:
             "$KONNECT_API/control-planes/${CP_ID}" \
             | jq -r '.config.telemetry_endpoint' | sed "s@https://@@")
 
+          echo "cp_id=$CP_ID" >> $GITHUB_OUTPUT
           echo "cp_endpoint=$CP_ENDPOINT" >> $GITHUB_OUTPUT
           echo "tp_endpoint=$TP_ENDPOINT" >> $GITHUB_OUTPUT
 

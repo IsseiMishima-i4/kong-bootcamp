@@ -8,12 +8,12 @@ paths:
       operationId: /get
       responses:
         "200":
-          description: "get: response 200"
+          description: "get: response 200."
   /post:
     post:
       operationId: /post
       responses:
         "200":
-          description: "post: response 200"
+          description: "post: response 200."
 servers:
 - url: https://httpbin.org

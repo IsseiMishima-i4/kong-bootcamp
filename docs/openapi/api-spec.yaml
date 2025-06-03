@@ -14,6 +14,6 @@ paths:
       operationId: /post
       responses:
         "200":
-          description: "post: response 200. "
+          description: "post: response 200."
 servers:
 - url: https://httpbin.org

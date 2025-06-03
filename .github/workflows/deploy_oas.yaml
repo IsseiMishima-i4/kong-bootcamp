@@ -43,7 +43,11 @@ jobs:
       - name: Back up current settings
         run: |
           set -x
-          deck gateway dump -o ./current-kong.yaml --konnect-addr $KONNECT_URL --konnect-control-plane-name $CONTROL_PLANE --konnect-token ${{ secrets.KONNECT_TOKEN }}
+          deck gateway dump \
+            --output ./current-kong.yaml \
+            --konnect-addr "${{ env.KONNECT_URL }}" \
+            --konnect-control-plane-name "${{ env.CONTROL_PLANE }}" \
+            --konnect-token "${{ secrets.KONNECT_TOKEN }}"
           cat ./current-kong.yaml
       - uses: actions/upload-artifact@v4
         with:

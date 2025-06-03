@@ -3,7 +3,8 @@ name: Convert OpenAPI Spec to Kong and Deploy
 on:
   push:
     paths:
-      - docs/openapi/api-spec.yaml
+      - bookinfo/openapi.yaml
+  workflow_dispatch:
 
 env:
   KONNECT_URL: "https://${{ vars.KONNECT_REGION }}.api.konghq.com"
@@ -14,10 +15,10 @@ jobs:
   deploy-oas:
     runs-on: ubuntu-latest
     container:
-      image: imuratashared/konnect-apiops
+      image: ghcr.io/enokidak/kong-bootcamp/konnect-apiops
     name: Convert OpenAPI Spec and deploy to Konnect
     env:
-      SPECFILE: "docs/openapi/api-spec.yaml"
+      SPECFILE: "bookinfo/openapi.yaml"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,11 +26,11 @@ jobs:
         run: inso lint spec $SPECFILE --verbose
       - name: Convert from OpenAPI Spec to Kong Confing
         run: |
-          set -x 
+          set -x
           cat $SPECFILE
           deck file openapi2kong -s $SPECFILE -o ./kong.yaml --verbose 9
           # Add plugins
-          deck file add-plugins -s ./kong.yaml -o ./kong.yaml kong-plugins/*
+          deck file add-plugins -s ./kong.yaml -o ./kong.yaml apiops/kong-plugins/*
           # Add a tag
           deck file add-tags -s ./kong.yaml -o ./kong.yaml $TAG
           cat kong.yaml
@@ -37,17 +38,10 @@ jobs:
         with:
           name: kong.yaml
           path: kong.yaml
-      # Validation doen't work with Konnect.
-      # - name: Validate Kong Config
-      #   run: deck gateway validate ./kong.yaml
       - name: Back up current settings
         run: |
           set -x
-          deck gateway dump \
-            --output ./current-kong.yaml \
-            --konnect-addr "${{ env.KONNECT_URL }}" \
-            --konnect-control-plane-name "${{ env.CONTROL_PLANE }}" \
-            --konnect-token "${{ secrets.KONNECT_TOKEN }}"
+          deck gateway dump -o ./current-kong.yaml --konnect-addr $KONNECT_URL --konnect-control-plane-name $CONTROL_PLANE --konnect-token ${{ secrets.KONNECT_TOKEN }}
           cat ./current-kong.yaml
       - uses: actions/upload-artifact@v4
         with:
@@ -63,4 +57,4 @@ jobs:
           deck gateway sync ./kong.yaml  --konnect-addr $KONNECT_URL --konnect-control-plane-name $CONTROL_PLANE --konnect-token ${{ secrets.KONNECT_TOKEN }} --select-tag $TAG
       - name: Confirmation
         run: |
-          ./tests/e2e.sh
+          ./apiops/tests/e2e.sh

@@ -34,7 +34,7 @@ BookInfoのアプリの資材とアプリをインターネット公開するた
 ## 3.監視ツールのデプロイ
 今回は監視ツールはPrometheus,Grafanaを使用する
 
-1. https://qiita.com/ipppppei/items/c15acc5c7f7af3e7c289を参照してPrometheus,Grafanaをデプロイ
+1. https://qiita.com/ipppppei/items/c15acc5c7f7af3e7c289 を参照してPrometheus,Grafanaをデプロイ
 2. Prometheus,Grafanaにアクセスできることを確認
 
 ## 4.監査ログの取得

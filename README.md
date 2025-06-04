@@ -1,4 +1,4 @@
-# kong-gateway
+# kong-bootcamp
 
 # このリポジトリについて
 Kong API Gatewayを使用したAPI管理について体系的に学習することができます。

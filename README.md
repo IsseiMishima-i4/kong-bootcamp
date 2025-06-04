@@ -10,7 +10,7 @@ Kong API Gatewayを使用したAPI管理について体系的に学習するこ�
 2. BookInfoアプリのデプロイ<br>
 3. 監視ツールのデプロイ<br>
 4. 監査ログの取得<br>
-5. APIOpsの実装br>
+5. APIOpsの実装<br>
 
 ## 0.事前準備
 1. Kubernetes環境の準備

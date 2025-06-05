@@ -29,7 +29,8 @@ BookInfoのアプリの資材とアプリをインターネット公開するた
 
 1. bookinfo/platform/kube/bookinfo.yamlをデプロイ
 2. bookinfo/platform/kube/bookinfo-ingressをデプロイ
-3. ProductPageにアクセスできることを確認
+3. bookinfo/bookinfo_deck.yamlを使いKongのService,Routeを作成
+4. ProductPageにアクセスできることを確認
 
 ## 3.監視ツールのデプロイ
 今回は監視ツールはPrometheus,Grafanaを使用する
